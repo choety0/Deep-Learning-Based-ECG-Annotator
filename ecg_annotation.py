@@ -1,10 +1,10 @@
 #import matplotlib with pdf as backend
-import matplotlib 
+import matplotlib
 matplotlib.use('PDF')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-import wfdb 
+import wfdb
 import os
 import numpy as np
 import math
@@ -15,21 +15,27 @@ from os.path import basename
 
 
 import tensorflow as tf
-from keras.layers import Dense,Activation,Dropout
-from keras.layers import LSTM,Bidirectional #could try TimeDistributed(Dense(...))
-from keras.models import Sequential, load_model
-from keras import optimizers,regularizers
-from keras.layers.normalization import BatchNormalization
-import keras.backend.tensorflow_backend as KTF
+#from keras.layers import Dense,Activation,Dropout
+#from keras.layers import LSTM,Bidirectional
+#from keras.models import Sequential, load_model
+#from keras import optimizers,regularizers
+#from keras.layers.normalization import BatchNormalization
+#import keras.backend.tensorflow_backend as KTF
+from tensorflow.keras.layers import Dense,Activation,Dropout
+from tensorflow.keras.layers import LSTM,Bidirectional
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras import optimizers,regularizers
+from tensorflow.keras.layers import BatchNormalization
+import tensorflow.keras.backend as KTF
 np.random.seed(0)
 
 # functions
-def get_ecg_data(datfile): 
+def get_ecg_data(datfile):
 	## convert .dat/q1c to numpy arrays
 	recordname=os.path.basename(datfile).split(".dat")[0]
 	recordpath=os.path.dirname(datfile)
 	cwd=os.getcwd()
-	os.chdir(recordpath) ## somehow it only works if you chdir. 
+	os.chdir(recordpath) ## somehow it only works if you chdir.
 
 	annotator='q1c'
 	annotation = wfdb.rdann(recordname, extension=annotator, sampfrom=0,sampto = None, pbdir=None)
@@ -38,16 +44,16 @@ def get_ecg_data(datfile):
 	FirstLstannot=min( i[0] for i in Lstannot)
 	LastLstannot=max( i[0] for i in Lstannot)-1
 	print("first-last annotation:", FirstLstannot,LastLstannot)
-	
+
 	record = wfdb.rdsamp(recordname, sampfrom=FirstLstannot,sampto = LastLstannot) #wfdb.showanncodes()
-	annotation = wfdb.rdann(recordname, annotator, sampfrom=FirstLstannot,sampto = LastLstannot) ## get annotation between first and last. 
+	annotation = wfdb.rdann(recordname, annotator, sampfrom=FirstLstannot,sampto = LastLstannot) ## get annotation between first and last.
 	annotation2 = wfdb.Annotation(recordname='sel32', extension='niek', sample=(annotation.sample-FirstLstannot), symbol = annotation.symbol, aux_note=annotation.aux_note)
 
 	Vctrecord=np.transpose(record.p_signals)
 	VctAnnotationHot=np.zeros( (6,len(Vctrecord[1])), dtype=np.int)
-	VctAnnotationHot[5]=1 ## inverse of the others 
-	#print("ecg, 2 lead of shape" , Vctrecord.shape) 
-	#print("VctAnnotationHot of shape" , VctAnnotationHot.shape) 
+	VctAnnotationHot[5]=1 ## inverse of the others
+	#print("ecg, 2 lead of shape" , Vctrecord.shape)
+	#print("VctAnnotationHot of shape" , VctAnnotationHot.shape)
 	#print('plotting extracted signal with annotation')
 	#wfdb.plotrec(record, annotation=annotation2, title='Record 100 from MIT-BIH Arrhythmia Database', timeunits = 'seconds')
 
@@ -55,8 +61,8 @@ def get_ecg_data(datfile):
 	#print(VctAnnotations)
 	for i in range(len(VctAnnotations)):
 		#print(VctAnnotations[i]) # Print to display annotations of an ecg
-		try: 
-			
+		try:
+
 			if VctAnnotations[i][1]=="p":
 				if VctAnnotations[i-1][1]=="(":
 					pstart=VctAnnotations[i-1][0]
@@ -67,7 +73,7 @@ def get_ecg_data(datfile):
 					if VctAnnotations[i+2][1]=="(":
 						qpos=VctAnnotations[i+2][0]
 					if VctAnnotations[i+4][1]==")":
-						spos=VctAnnotations[i+4][0]	
+						spos=VctAnnotations[i+4][0]
 					for ii in range(0,8): ## search for t (sometimes the "(" for the t  is missing  )
 						if VctAnnotations[i+ii][1]=="t":
 							tpos=VctAnnotations[i+ii][0]
@@ -79,10 +85,10 @@ def get_ecg_data(datfile):
 								VctAnnotationHot[2][qpos:rpos]=1 #QR
 								VctAnnotationHot[3][rpos:spos]=1 #RS
 								VctAnnotationHot[4][spos:tendpos]=1 #ST (from end of S to end of T)
-								VctAnnotationHot[5][pstart:tendpos]=0 #tendpos:pstart becomes 1, because it is inverted above					
+								VctAnnotationHot[5][pstart:tendpos]=0 #tendpos:pstart becomes 1, because it is inverted above
 		except IndexError:
 			pass
-	
+
 	Vctrecord=np.transpose(Vctrecord) # transpose to (timesteps,feat)
 	VctAnnotationHot=np.transpose(VctAnnotationHot)
 	os.chdir(cwd)
@@ -91,7 +97,7 @@ def get_ecg_data(datfile):
 
 
 def splitseq(x,n,o):
-	#split seq; should be optimized so that remove_seq_gaps is not needed. 
+	#split seq; should be optimized so that remove_seq_gaps is not needed.
 	upper=math.ceil( x.shape[0] / n) *n
 	print("splitting on",n,"with overlap of ",o,	"total datapoints:",x.shape[0],"; upper:",upper)
 	for i in range(0,upper,n):
@@ -125,12 +131,12 @@ def remove_seq_gaps(x,y):
 	print("filterering.")
 	print("before shape x,y",x.shape,y.shape)
 	for i in range(y.shape[0]):
-		
+
 		c=c+1
 		if c<window :
 			include.append(i)
 		if sum(y[i,0:5])>0:
-			c=0 
+			c=0
 		if c >= window:
 			#print ('filtering')
 			pass
@@ -201,8 +207,8 @@ def plotecg_validation(x,y_true,y_pred,begin,end):
 	plt.plot(y_true[begin:end,4])
 	plt.subplot(212)
 	plt.plot(y_true[begin:end,5])
-	
-def LoaddDatFiles(datfiles):  
+
+def LoaddDatFiles(datfiles):
 	for datfile in datfiles:
 	    print(datfile)
 	    if basename(datfile).split(".",1)[0] in exclude:
@@ -213,7 +219,7 @@ def LoaddDatFiles(datfiles):
 	    	x,y=get_ecg_data(datfile)
 	    	x,y=remove_seq_gaps(x,y)
 
-	    	x,y=splitseq(x,1000,150),splitseq(y,1000,150) ## create equal sized numpy arrays of n size and overlap of o 
+	    	x,y=splitseq(x,1000,150),splitseq(y,1000,150) ## create equal sized numpy arrays of n size and overlap of o
 
 	    	x = normalizesignal_array(x)
 	    	## todo; add noise, shuffle leads etc. ?
@@ -241,22 +247,22 @@ def get_session(gpu_fraction=0.8):
 
 def getmodel():
 	model = Sequential()
-	model.add(Dense(32,W_regularizer=regularizers.l2(l=0.01), input_shape=(seqlength, features)))
+	model.add(Dense(32,kernel_regularizer=regularizers.l2(l=0.01), input_shape=(seqlength, features)))
 	model.add(Bidirectional(LSTM(32, return_sequences=True)))#, input_shape=(seqlength, features)) ) ### bidirectional ---><---
 	model.add(Dropout(0.2))
 	model.add(BatchNormalization())
-	model.add(Dense(64, activation='relu',W_regularizer=regularizers.l2(l=0.01)))
+	model.add(Dense(64, activation='relu',kernel_regularizer=regularizers.l2(l=0.01)))
 	model.add(Dropout(0.2))
 	model.add(BatchNormalization())
 	model.add(Dense(dimout, activation='softmax'))
-	adam = optimizers.adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
-	model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy']) 
+	adam = optimizers.Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+	model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
 	print(model.summary())
 	return(model)
 
 ##################################################################
 ##################################################################
-qtdbpath=sys.argv[1] ## first argument = qtdb database from physionet. 
+qtdbpath=sys.argv[1] ## first argument = qtdb database from physionet.
 perct=0.81 #percentage training
 percv=0.19 #percentage validation
 
@@ -276,8 +282,8 @@ exclude.update(["sel35","sel36","sel37","sel50","sel102","sel104","sel221","sel2
 ##################################################################
 
 # load data
-datfiles=glob.glob(qtdbpath+"*.dat")
-xxt,yyt=LoaddDatFiles(datfiles[ :round(len(datfiles)*perct) ]) # training data. 
+datfiles=glob.glob(qtdbpath+"/*.dat")
+xxt,yyt=LoaddDatFiles(datfiles[ :round(len(datfiles)*perct) ]) # training data.
 xxt,yyt=unison_shuffled_copies(xxt,yyt) ### shuffle
 xxv,yyv=LoaddDatFiles(datfiles[ -round(len(datfiles)*percv): ] ) ## validation data.
 seqlength=xxt.shape[1]
@@ -293,8 +299,12 @@ print("xxv/validation shape: {}, Seqlength: {}, Features: {}".format(xxv.shape[0
 # 		plt.close()
 
 # call keras/tensorflow and build lstm model 
-KTF.set_session(get_session())
-with tf.device('/cpu:0'): #switch to /cpu:0 to use cpu 
+#KTF.set_session(get_session()) # replaced to the following two lines
+from tensorflow.keras.models import load_model, Model
+from tensorflow.python.keras import backend as KTF
+sess = tf.compat.v1.Session()
+KTF.set_session(sess)
+with tf.device('/cpu:0'): #switch to /cpu:0 to use cpu
 	if not os.path.isfile('model.h5'):
 		model = getmodel() # build model
 		model.fit(xxt, yyt, batch_size=32, epochs=100, verbose=1) # train the model
@@ -303,19 +313,19 @@ with tf.device('/cpu:0'): #switch to /cpu:0 to use cpu
 	model = load_model('model.h5')
 	score, acc = model.evaluate(xxv, yyv, batch_size=4, verbose=1)
 	print('Test score: {} , Test accuracy: {}'.format(score, acc))
-	
+
 	# predict
-	yy_predicted = model.predict(xxv) 
+	yy_predicted = model.predict(xxv)
 
 	# maximize probabilities of prediction.
-	for i in range(yyv.shape[0]): 
+	for i in range(yyv.shape[0]):
 		b = np.zeros_like(yy_predicted[i,:,:])
 		b[np.arange(len(yy_predicted[i,:,:])), yy_predicted[i,:,:].argmax(1)] = 1
 		yy_predicted[i,:,:] = b
 
-	# plot: 
+	# plot:
 	with PdfPages('ecg.pdf') as pdf:
-		for i in range( xxv.shape[0] ): 
+		for i in range( xxv.shape[0] ):
 			print (i)
 			plotecg_validation(xxv[i,:,:],yy_predicted[i,:,:],yyv[i,:,:],0,yy_predicted.shape[1])  # top = predicted, bottom=true
 			pdf.savefig()
